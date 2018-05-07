@@ -7,13 +7,19 @@ def get_setting(variable, default=None):
     provided default """
     return getattr(settings, variable, default)
 
+
 # redis server host
 DEFENDER_REDIS_URL = get_setting('DEFENDER_REDIS_URL')
+
+# reuse declared cache from django settings
+DEFENDER_REDIS_NAME = get_setting('DEFENDER_REDIS_NAME')
 
 MOCK_REDIS = get_setting('DEFENDER_MOCK_REDIS', False)
 
 # see if the user has overridden the failure limit
 FAILURE_LIMIT = get_setting('DEFENDER_LOGIN_FAILURE_LIMIT', 3)
+USERNAME_FAILURE_LIMIT = get_setting('DEFENDER_LOGIN_FAILURE_LIMIT_USERNAME', FAILURE_LIMIT)
+IP_FAILURE_LIMIT = get_setting('DEFENDER_LOGIN_FAILURE_LIMIT_IP', FAILURE_LIMIT)
 
 # If this is True, the lockout checks to evaluate if the IP failure limit and
 # the username failure limit has been reached before issuing the lockout.
@@ -26,7 +32,8 @@ DISABLE_IP_LOCKOUT = get_setting('DEFENDER_DISABLE_IP_LOCKOUT', False)
 
 # If this is True, usernames will not get locked when
 # there are too many login attempts.
-DISABLE_USERNAME_LOCKOUT = get_setting('DEFENDER_DISABLE_USERNAME_LOCKOUT', False)
+DISABLE_USERNAME_LOCKOUT = get_setting(
+    'DEFENDER_DISABLE_USERNAME_LOCKOUT', False)
 
 # use a specific username field to retrieve from login POST data
 USERNAME_FORM_FIELD = get_setting('DEFENDER_USERNAME_FORM_FIELD', 'username')
@@ -53,9 +60,6 @@ LOCKOUT_TEMPLATE = get_setting('DEFENDER_LOCKOUT_TEMPLATE')
 
 ERROR_MESSAGE = ugettext_lazy("Please enter a correct username and password. "
                               "Note that both fields are case-sensitive.")
-
-# use a specific username field to retrieve from login POST data
-USERNAME_FORM_FIELD = get_setting('DEFENDER_USERNAME_FORM_FIELD', 'username')
 
 LOCKOUT_URL = get_setting('DEFENDER_LOCKOUT_URL')
 

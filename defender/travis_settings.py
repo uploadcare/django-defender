@@ -1,4 +1,6 @@
 import os
+from celery import Celery
+
 
 DATABASES = {
     'default': {
@@ -7,6 +9,12 @@ DATABASES = {
     }
 }
 
+CACHES = {
+    'default': {
+        'BACKEND': 'redis_cache.RedisCache',
+        'LOCATION': 'localhost:6379',
+    }
+}
 
 SITE_ID = 1
 
@@ -33,6 +41,17 @@ TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.contrib.auth.context_processors.auth',
+                'django.template.context_processors.debug',
+                'django.template.context_processors.i18n',
+                'django.template.context_processors.media',
+                'django.template.context_processors.static',
+                'django.template.context_processors.tz',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
     },
 ]
 
@@ -50,10 +69,6 @@ DEFENDER_MOCK_REDIS = False
 CELERY_ALWAYS_EAGER = True
 BROKER_BACKEND = 'memory'
 BROKER_URL = 'memory://'
-
-import os
-
-from celery import Celery
 
 # set the default Django settings module for the 'celery' program.
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'defender.travis_settings')

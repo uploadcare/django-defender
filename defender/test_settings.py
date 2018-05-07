@@ -1,4 +1,5 @@
 import os
+from celery import Celery
 
 DATABASES = {
     'default': {
@@ -33,6 +34,17 @@ TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.contrib.auth.context_processors.auth',
+                'django.template.context_processors.debug',
+                'django.template.context_processors.i18n',
+                'django.template.context_processors.media',
+                'django.template.context_processors.static',
+                'django.template.context_processors.tz',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
     },
 ]
 
@@ -50,10 +62,6 @@ DEFENDER_MOCK_REDIS = True
 CELERY_ALWAYS_EAGER = True
 BROKER_BACKEND = 'memory'
 BROKER_URL = 'memory://'
-
-import os
-
-from celery import Celery
 
 # set the default Django settings module for the 'celery' program.
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'defender.test_settings')

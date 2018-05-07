@@ -17,11 +17,42 @@ Build status
 
 Sites using Defender:
 =====================
+If you are using defender on your site, submit a PR to add to the list.
+
 - https://hub.docker.com
 
 
 Versions
 ========
+- 0.5.4
+  - Added 2 new setting variables for more granular failure limit control [@williamboman]
+  - Added ssl option when instantiating StrictRedis [@mjrimrie]
+  - Send signals when blocking username or ip [@williamboman]
+
+- 0.5.3
+  - Remove mockredis as install requirement, make only test requirement [@blueyed]
+
+- 0.5.2
+  - Fix regex in 'unblock_username_view' to handle special symbols [@ruthus18]
+  - Fix django requires version for 1.11.x [@kencochrane]
+  - remove hiredis dependency [@ericbuckley]
+  - Correctly get raw client when using django_redis cache. [@cburger]
+  - replace django.core.urlresolvers with django.urls For Django 2.0 [@s-wirth]
+  - add username kwarg for providing username directly rather than via callback arg [@williamboman]
+  - Only use the username if it is actually provided  [@cobusc]
+
+- 0.5.1
+  - Middleware fix for django >= 1.10 #93 [@Temeez]
+  - Force the username to lowercase #90 [@MattBlack85]
+
+- 0.5.0
+  - Better support for Django 1.11 [@dukebody]
+  - Added support to share redis config with django.core.cache [@Franr]
+  - Allow decoration of functions beyond the admin login [@MattBlack85]
+  - Doc improvements [@dukebody]
+  - Allow usernames with plus signs in unblock view [@dukebody]
+  - Code cleanup [@KenCochrane]
+- 0.4.3 - Better Support for Django 1.10
 - 0.4.2 - Better support for Django 1.9
 - 0.4.1 - minor refactor to make it easier to retrieve username.
 - 0.4.0 - added ``DEFENDER_DISABLE_IP_LOCKOUT`` and added support for Python 3.5
@@ -71,6 +102,8 @@ Features
     - list of blocked usernames and ip's
     - ability to unblock people
     - list of recent login attempts
+- Can be easily adapted to custom authentication method.
+- Signals are sent when blocking username or IP
 
 Long term goals
 ===============
@@ -145,12 +178,13 @@ This started out as a fork of django-axes, and is using as much of their code
 as possible, and removing the parts not needed, and speeding up the lookups
 to improve the login.
 
+
 requirements
 ============
 
-- django: 1.6.x, 1.7.x, 1.8.x, 1.9.x
+- django: 1.8.x, 1.9.x, 1.10.x, 1.11.x
 - redis
-- python: 2.6.x, 2.7.x, 3.3.x, 3.4.x, PyPy
+- python: 2.7.x, 3.3.x, 3.4.x, 3.5.x, 3.6.x, PyPy
 
 How it works
 ============
@@ -283,19 +317,8 @@ Database tables:
 You will need to create tables in your database that are necessary
 for operation.
 
-If you're using Django 1.7.x:
 ```bash
 python manage.py migrate defender
-```
-
-On versions of Django prior to 1.7, you might use South (version >= 1.0).
-```bash
-python manage.py migrate defender
-```
-
-If you're not using South, a normal syncdb will work:
-```bash
-python manage.py syncdb
 ```
 
 Customizing Defender
@@ -306,8 +329,14 @@ These should be defined in your ``settings.py`` file.
 
 * ``DEFENDER_LOGIN_FAILURE_LIMIT``: Int: The number of login attempts allowed before a
 record is created for the failed logins.  [Default: ``3``]
+* ``DEFENDER_LOGIN_FAILURE_LIMIT_USERNAME``: Int: The number of login attempts allowed
+on a username before a record is created for the failed logins.  [Default: ``DEFENDER_LOGIN_FAILURE_LIMIT``]
+* ``DEFENDER_LOGIN_FAILURE_LIMIT_IP``: Int: The number of login attempts allowed
+from an IP before a record is created for the failed logins.  [Default: ``DEFENDER_LOGIN_FAILURE_LIMIT``]
 * ``DEFENDER_BEHIND_REVERSE_PROXY``: Boolean: Is defender behind a reverse proxy?
 [Default: ``False``]
+* ``DEFENDER_REVERSE_PROXY_HEADER``: String: the name of the http header with your
+reverse proxy IP address  [Default: ``HTTP_X_FORWARDED_FOR``]
 * ``DEFENDER_LOCK_OUT_BY_IP_AND_USERNAME``: Boolean: Locks a user out based on a combination of IP and Username.  This stops a user denying access to the application for all other users accessing the app from behind the same IP address. [Default: ``False``]
 * ``DEFENDER_DISABLE_IP_LOCKOUT``: Boolean: If this is True, it will not lockout the users IP address, it will only lockout the username. [Default: False]
 * ``DEFENDER_DISABLE_USERNAME_LOCKOUT``: Boolean: If this is True, it will not lockout usernames, it will only lockout IP addresess. [Default: False]
@@ -320,8 +349,6 @@ number of seconds. If ``0``, the locks will not expire. [Default: ``300``]
    - ``failure_limit``: The number of failures before you get blocked.
 * ``DEFENDER_USERNAME_FORM_FIELD``: String: the name of the form field that contains your
 users usernames. [Default: ``username``]
-* ``DEFENDER_REVERSE_PROXY_HEADER``: String: the name of the http header with your
-reverse proxy IP address  [Default: ``HTTP_X_FORWARDED_FOR``]
 * ``DEFENDER_CACHE_PREFIX``: String: The cache prefix for your defender keys.
 [Default: ``defender``]
 * ``DEFENDER_LOCKOUT_URL``: String: The URL you want to redirect to if someone is
@@ -329,6 +356,8 @@ locked out.
 * ``DEFENDER_REDIS_URL``: String: the redis url for defender.
 [Default: ``redis://localhost:6379/0``]
 (Example with password: ``redis://:mypassword@localhost:6379/0``)
+* ``DEFENDER_REDIS_NAME``: String: the name of your cache client on the CACHES django setting. If set, ``DEFENDER_REDIS_URL`` will be ignored.
+[Default: ``None``]
 * ``DEFENDER_STORE_ACCESS_ATTEMPTS``: Boolean: If you want to store the login
 attempt to the database, set to True. If False, it is not saved
 [Default: ``True``]
@@ -340,6 +369,108 @@ long to keep the access attempt records in the database before the management
 command cleans them up.
 [Default: ``24``]
 
+Adapting to other authentication method
+--------------------
+
+`defender` can be used for authentication other than `Django authentication system`.
+E.g. if `django-rest-framework` authentication has to be protected from brute force attack, a custom authentication method can be implemented.
+
+There's sample `BasicAuthenticationDefender` class based on `djangorestframework.BasicAuthentication`:
+
+```python
+import base64
+import binascii
+
+from defender import utils
+from defender import config
+from django.utils.translation import ugettext_lazy as _
+
+from rest_framework import HTTP_HEADER_ENCODING, exceptions
+
+from rest_framework.authentication import (
+    BasicAuthentication,
+    get_authorization_header,
+    )
+
+
+class BasicAuthenticationDefender(BasicAuthentication):
+
+    def get_username_from_request(self, request):
+        auth = get_authorization_header(request).split()
+        return base64.b64decode(auth[1]).decode(HTTP_HEADER_ENCODING).partition(':')[0]
+
+    def authenticate(self, request):
+        auth = get_authorization_header(request).split()
+
+        if not auth or auth[0].lower() != b'basic':
+            return None
+
+        if len(auth) == 1:
+            msg = _('Invalid basic header. No credentials provided.')
+            raise exceptions.AuthenticationFailed(msg)
+        elif len(auth) > 2:
+            msg = _('Invalid basic header. Credentials string should not contain spaces.')
+            raise exceptions.AuthenticationFailed(msg)
+
+        if utils.is_already_locked(request, get_username=self.get_username_from_request):
+            detail = "You have attempted to login {failure_limit} times, with no success." \
+                     "Your account is locked for {cooloff_time_seconds} seconds" \
+                     "".format(
+                        failure_limit=config.FAILURE_LIMIT,
+                        cooloff_time_seconds=config.COOLOFF_TIME
+                     )
+            raise exceptions.AuthenticationFailed(_(detail))
+
+        try:
+            auth_parts = base64.b64decode(auth[1]).decode(HTTP_HEADER_ENCODING).partition(':')
+        except (TypeError, UnicodeDecodeError, binascii.Error):
+            msg = _('Invalid basic header. Credentials not correctly base64 encoded.')
+            raise exceptions.AuthenticationFailed(msg)
+
+        userid, password = auth_parts[0], auth_parts[2]
+        login_unsuccessful = False
+        login_exception = None
+        try:
+            response = self.authenticate_credentials(userid, password)
+        except exceptions.AuthenticationFailed as e:
+            login_unsuccessful = True
+            login_exception = e
+
+        utils.add_login_attempt_to_db(request,
+                                      login_valid=not login_unsuccessful,
+                                      get_username=self.get_username_from_request)
+
+        user_not_blocked = utils.check_request(request,
+                                               login_unsuccessful=login_unsuccessful,
+                                               get_username=self.get_username_from_request)
+        if user_not_blocked and not login_unsuccessful:
+            return response
+
+        raise login_exception
+
+```
+
+To make it works add `BasicAuthenticationDefender` to `DEFAULT_AUTHENTICATION_CLASSES` above all other authentication methods in your `settings.py`.
+
+
+Django Signals
+--------------------
+
+`django-defender` will send signals when blocking a username or an IP address. To set up signal receiver functions:
+
+```python
+from django.dispatch import receiver
+from defender import signals
+
+@receiver(signals.username_block)
+def username_blocked(username, **kwargs):
+    print("%s was blocked!" % username)
+
+@receiver(signals.ip_block)
+def ip_blocked(ip_address, **kwargs):
+    print("%s was blocked!" % ip_address)
+
+```
 
 Running Tests
 =============
@@ -356,3 +487,8 @@ With Code coverage:
 ```
 PYTHONPATH=$PYTHONPATH:$PWD coverage run --source=defender $(which django-admin.py) test defender --settings=defender.test_settings
 ```
+
+How to release
+==============
+1. python setup.py sdist
+2. twine upload dist/*
